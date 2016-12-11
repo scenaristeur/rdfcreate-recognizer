@@ -1,7 +1,7 @@
 <link rel="import" href="../polymer/polymer.html">
 <!-- /<link rel="import" href="../iron-localstorage/iron-localstorage.html"> -->
 <link rel="import" href="../iron-ajax/iron-ajax.html">
-<link rel="import" href="../paper-input/paper-input.html">
+
 <link rel="import" href="../app-storage/app-localstorage/app-localstorage-document.html">
 
 <script src="lib/dollar.js"></script>
@@ -26,6 +26,10 @@
     <app-localstorage-document key="noeuds" data="[[formes]]">
 </app-localstorage-document>
 <app-localstorage-document key="lastForme" data="[[forme]]">
+</app-localstorage-document>
+<app-localstorage-document key="firstPoint" data="[[firstPoint]]">
+</app-localstorage-document>
+<app-localstorage-document key="lastPoint" data="[[lastPoint]]">
 </app-localstorage-document>
 
     <iron-ajax
@@ -173,6 +177,16 @@ head: {
 },
 resultsGetGraphe:{
   type: Array,
+  notify: true
+},
+firstPoint:{
+  type: Object,
+  notify: true,
+  value: {},
+},
+lastPoint:{
+  type: Object,
+  value: {},
   notify: true
 },
         _isDown:{},
@@ -498,6 +512,11 @@ context.stroke();
 							var menuAdd = this.$.menuAdd;
 							//menuAdd.z-index(3);
 							console.log(menuAdd);
+
+              this.firstPoint = this._points[0];
+              this.lastPoint = this._points[this._points.length-1]
+              console.log(this.firstPoint);
+              console.log(this.lastPoint );
 						}
 					}
 					else // fewer than 10 points were inputted
