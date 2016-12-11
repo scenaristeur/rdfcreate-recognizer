@@ -1,0 +1,660 @@
+<link rel="import" href="../polymer/polymer.html">
+<!-- /<link rel="import" href="../iron-localstorage/iron-localstorage.html"> -->
+<link rel="import" href="../iron-ajax/iron-ajax.html">
+<link rel="import" href="../paper-input/paper-input.html">
+<link rel="import" href="../app-storage/app-localstorage/app-localstorage-document.html">
+
+<script src="lib/dollar.js"></script>
+<!--<script src="lib/dollarRun.js"></script>-->
+
+
+<!--
+`rdfcreate-recognizer`
+
+
+@demo demo/index.html
+-->
+
+<dom-module id="rdfcreate-recognizer">
+  <template>
+    <style>
+      :host {
+        display: block;
+      },
+
+    </style>
+    <app-localstorage-document key="noeuds" data="[[formes]]">
+</app-localstorage-document>
+<app-localstorage-document key="lastForme" data="[[forme]]">
+</app-localstorage-document>
+
+    <iron-ajax
+			id="ajaxupdate"
+			url="https://rdf-smag0.rhcloud.com/ds/update"
+			body="{{options}}"
+			method="POST"
+			handle-as="document"
+			content-type="application/x-www-form-urlencoded"
+			on-response="handleResponse">
+		</iron-ajax>
+
+    <iron-ajax
+    		auto
+        id="ajaxGetGraphe"
+    		url="{{urlGetGraphe}}"
+    		params="{{optionsgetGraphe}}"
+    		handle-as="json"
+    		on-response="handleResponseGetGraphe"
+    		debounce-duration="300"></iron-ajax>
+<!--  <iron-localstorage name="rdfcreate-storage"
+   value="{{formes}}"
+on-iron-localstorage-load-empty="initializeDefaultCartoon"
+ ></iron-localstorage>-->
+ <!-- on-iron-localstorage-load-empty="initializeDefaultCartoon"-->
+  <!--  <h2>Hello [[prop1]]</h2> -->
+  <div id="lesCanvas">
+    <canvas id="myCanvas"
+      style = 'position:absolute ; top :0px ; left :0px;  z-index:1; opacity:0.9;'
+    width="800px"
+    height="600px"
+ on-down="mouseDownEvent"
+on-track="mouseMoveEvent"
+
+ on-up="mouseUpEvent"
+ oncontextmenu="return false;">
+  <!--onmousemove="mouseMoveEvent"-->
+  <span style="background-color:#ffff88;">The &lt;canvas&gt; element is not supported by this browser.</span>
+</canvas>
+
+</div>
+<div   style = 'position:relative ; top :610px ; left :10px; '>
+<!--choix du moteur de reconnaissance" -->
+<form style="font-size:10pt">
+						<input type="radio" name="search" id="useGSS" checked="">
+						<span style="font-weight:bold">Use Golden Section Search <i>(original)</i></span>
+						<br>
+						<input type="radio" name="search" id="useProtractor">
+						<span style="font-weight:bold">Use Protractor <i>(faster)</i></span>
+
+					</form>
+          <template is="dom-bind" result="{{result}}" requete="{{requete}}">
+
+
+  <div>Requete updatev: {{requete}}</div>
+    <div>Result : {{result}}</div>
+<!--  <div>Query get : {{query}}</div> -->
+  <div><a href="http://rdf-smag0.rhcloud.com/ds/query?query=select+*+where+%7B%3Fs+%3Fp+%3Fo%7D&output=xml&stylesheet=%2Fxml-to-html.xsl" target="_blank">
+    Consulter les données</a></div>
+</template>
+<paper-input
+					type="text"
+					style="width:20em"
+					label="Endpoint"
+					value="{{endpoint}}"></paper-input>
+
+					<paper-input
+					type="text"
+					style="width:20em"
+					label="Dataset"
+					value="{{ds}}"></paper-input>
+
+					<paper-input
+					type="text"
+					style="width:20em"
+					label="Query"
+					value="{{query::change}}"></paper-input>
+
+        </div>
+  </template>
+
+  <script>
+    Polymer({
+
+      is: 'rdfcreate-recognizer',
+
+      properties: {
+        prop1: {
+          type: String,
+          value: 'rdfcreate-recognizer',
+        },
+         cartoon: {
+        type: Object
+      },
+      endpoint:{
+        value: "https://rdf-smag0.rhcloud.com",
+        notify:true,
+      },
+      urlGetGraphe:{
+          value: 'http://rdf-smag0.rhcloud.com',
+      },
+      optionsgetGraphe:{},
+ds : {
+  value: 'ds',
+  notify: true
+},
+action : {
+  value: 'query',
+  notify: true
+},
+query : {
+  value: 'SELECT * WHERE { \n GRAPH <http://smag0.blogspot.fr/Graphes/Noeuds/CircleGraphe_'+this.timestamp+'> { \n ?Sujet ?Predicat ?Objet } }',
+  //SELECT ?b ?c WHERE { GRAPH <http://AliceIRI> {
+//<http://local.virt/foo> ?b ?c}}
+  notify: true
+
+  //////////////////////////////////////////////////////////////////////
+  //
+  //            AUTRES REQUETES A AJOUTER
+  //
+  //SELECT * WHERE {?Sujet <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>	?Objet}
+  //SELECT * WHERE {?Sujet <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>	<http://smag0.blogspot.fr/NS/RobotBase#Robot>}
+            /*Exemple de requetes
+              value: 'SELECT * WHERE {?Sujet <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>	<http://smag0.blogspot.fr/NS/RobotBase#Robot>}',
+  //<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>	<http://smag0.blogspot.fr/NS/RobotBase#Robot>*/
+  /*<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>	<http://smag0.blogspot.fr/ns/smag0/robotique#Exposant>*/
+},
+limite : {
+  value: 1000,
+  notify: true
+},
+output : {
+  value: 'json',
+  notify: true
+},
+urlGetGraphe: {
+  computed: 'computedUrl(endpoint,ds,action)'
+},
+optionsgetGraphe: {
+  computed: 'computedOptions(query,limite,output)'
+},
+head: {
+  type: Array,
+  notify: true
+},
+resultsGetGraphe:{
+  type: Array,
+  notify: true
+},
+        _isDown:{},
+        _points:{},
+        _r:{},
+        _g:{},
+        _rc:{},
+        canvas:{},
+        noeuds:{type:Array, value:[],notify:true},
+        selection:{type:Array, value:[]},
+        forme:{},
+        formes: {  type: Array, // Available property types are String, Number, Boolean, Array, and Object
+          notify: true,
+    value: function () { return []; } ,
+    /**
+* L'objet du triplet RDF
+*/
+objet : {
+  value: 'Projet',
+  notify: true
+},
+
+/**
+* Les paramètres de la requete update
+*/
+options: {
+  //computed: 'computeUpdate(sujet,propriete,objet)'
+},
+
+/**
+*variable pour afficher la requete, n'est pas utile
+*/
+requete: {
+  notify: true
+},
+timestamp:{
+  // / value: new Date().getTime(),
+},
+
+/**
+* La réponse du serveur retournée par la requete de mise à jour
+*/
+result: {
+  notify: true
+}
+// Default value
+},
+      },
+      /**
+* Construit la requete depuis les variables sujet, propriete, objet
+*//*
+computeUpdate: function(sujet,propriete,objet){
+  console.log("computeUpdate");
+var propSend="smag:"+propriete+" ";
+if (propriete == "type"){
+propSend="<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+}
+
+
+var update  =  "PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n";
+update +=  "PREFIX rdfs:   <http://www.w3.org/2000/01/rdf-schema#> \n";
+update += "PREFIX smag:   <http://smag0.blogspot.fr/NS#> \n";
+update += "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n";
+update += "INSERT DATA { \n";
+update += "GRAPH <http://smag0.blogspot.fr/SparqlUpdate>{ \n";
+update += "smag:"+sujet+"   "+propSend+"   smag:"+objet+" . \n";
+update += " } \n } \n";
+console.log(update);
+this.requete=update;
+return {update: update};
+},*/
+buildRequete: function(){
+
+  var sujet = this.sujet;
+  var propriete = this.propriete;
+  var objet = this.objet;
+  var timestamp = this.timestamp ;
+  this.query = 'SELECT * WHERE { \n GRAPH <http://smag0.blogspot.fr/Graphes/Noeuds/CircleGraphe_'+this.timestamp+'> { \n ?Sujet ?Predicat ?Objet } }';
+  //var timestamp2 = Date.now();
+  var dateIso = new Date(Date.now()).toISOString();
+  console.log(dateIso);
+  var propSend="smag:"+propriete+" ";
+  if (propriete == "type"){
+  propSend="<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+  }
+
+
+  var update  =  "PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n";
+  update +=  "PREFIX rdfs:   <http://www.w3.org/2000/01/rdf-schema#> \n";
+  update += "PREFIX smag:   <http://smag0.blogspot.fr/NS#> \n";
+  update += "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n";
+  update += "PREFIX sch: <https://schema.org/> \n";
+  update += "PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#> \n";
+  update += "INSERT DATA { \n";
+  update += "GRAPH <http://smag0.blogspot.fr/Graphes/Noeuds/CircleGraphe_"+timestamp+">{ \n";
+  update += "smag:"+sujet+"   "+propSend+"   smag:"+objet+" . \n";
+  update += "smag:"+sujet+"   rdf:type       sch:Event .\n";
+  update += "smag:"+sujet+"   sch:startDate  \""+dateIso+"\" .\n ";
+  update += "smag:"+sujet+"   geo:lat        \""+this.forme.centerX+"\" .\n ";
+  update += "smag:"+sujet+"   geo:lon         \""+this.forme.centerY+"\"   .\n ";
+
+  update += " } \n } \n";
+  console.log(update);  this.requete=update;
+  // /return {update: update};
+  this.options = {update: update};
+},
+      ready: function(){
+        console.log("ready");
+
+        var canvas =this.$.myCanvas;
+var ctx = canvas.getContext("2d");
+ctx.font = "30px Arial";
+ctx.fillText("Dessine un cercle dans cette zone",100,canvas.height/2);
+
+
+        this.onLoadEvent();
+        this.timestamp = Date.now();
+        console.log(this.timestamp);
+
+      },
+      onLoadEvent: function(){
+        console.log("onloadEvent");
+        this._points = new Array();
+        this._r = new DollarRecognizer();
+      //  this.windowResized();
+        this.canvas = this.$.myCanvas;
+        console.log(this.canvas);
+        this._g = this.canvas.getContext('2d');
+        this._g.fillStyle = "rgb(0,0,225)";
+        this._g.strokeStyle = "rgb(0,0,225)";
+        this._g.lineWidth = 3;
+        this._g.font = "16px Gentilis";
+        this._rc = this.getCanvasRect(this.canvas); // canvas rect on page
+        this._g.fillStyle = "rgb(255,255,136)";
+        this._g.fillRect(0, 0, this._rc.width, 20);
+
+        this._isDown = false;
+      },
+
+       getScrollY:function()
+			{
+				var scrollY = window.scrollTop;
+        console.log(scrollY);
+				return scrollY;
+			},
+
+      // initializes default if nothing has been stored
+initializeDefaultCartoon: function() {
+  this.cartoon = {
+    name: "Mickey",
+    hasEars: true
+  }
+},
+      windowResized: function(){
+        //	resizeCanvas(windowWidth, windowHeight);
+        this.canvas = document.getElementById("myCanvas");
+    this.canvas.width = document.body.clientWidth;
+    this.canvas.height = document.body.clientHeight;
+
+    //ramener les noeuds dans le graphe
+     for (var i=0; i<this.noeuds.length; i++) {
+    var x=this.noeuds[i].x;
+    var y=this.noeuds[i].y;
+   // console.log(x+" "+y);
+    if (this.noeuds[i].x>windowWidth){
+      this.noeuds[i].x=windowWidth-10;
+    }
+        if (this.noeuds[i].y>windowHeight){
+      this.noeuds[i].y=windowHeight-10;
+    }
+  }
+},
+
+
+
+
+deselect:function() {
+	this.selection = [];
+},
+
+getCanvasRect:function (canvas)
+{
+  var w = canvas.width;
+  var h = canvas.height;
+
+  var cx = canvas.offsetLeft;
+  var cy = canvas.offsetTop;
+  while (canvas.offsetParent != null)
+  {
+    canvas = canvas.offsetParent;
+    cx += canvas.offsetLeft;
+    cy += canvas.offsetTop;
+  }
+  return {x: cx, y: cy, width: w, height: h};
+},
+
+
+
+
+ mouseDownEvent: function(e)
+{        console.log(e.detail);
+        x=e.detail.x;
+        y=e.detail.y;
+
+  document.onselectstart = function() { return false; } // disable drag-select
+  document.onmousedown = function() { return false; } // disable drag-select
+  this._isDown = true;
+  //debX=x;
+  //debY=y;
+  this.deselect();
+  x -= this._rc.x;
+  y -= this._rc.y; //quel est l'equivalent polymer de window.scrolltop, ou scrllY - this.scrollY;
+  console.log(y)
+  if (this._points.length > 0)
+  this._g.clearRect(0, 0, this._rc.width, this._rc.height);
+  this._points.length = 1; // clear
+  this._points[0] = new Point(x, y);
+  this.drawText("Recording unistroke...");
+  this._g.fillRect(x - 4, y - 3, 9, 9);
+},
+
+  mouseMoveEvent: function (e)
+			{
+    //    console.log(e.detail);
+        x=e.detail.x;
+        y=e.detail.y;
+				if (this._isDown)
+				{
+
+					x -= this._rc.x;
+      /*   console.log(this.scroller);
+					y -= this._rc.y - this.getScrollY();*/
+          y -= this._rc.y;
+					this._points[this._points.length] = new Point(x, y); // append
+					this.drawConnectedPoint(this._points.length - 2, this._points.length - 1);
+				}
+			},
+
+			mouseUpEvent: function (e)
+			{
+        console.log(e.detail);
+        x=e.detail.x;
+        y=e.detail.y;
+
+				document.onselectstart = function() { return true; } // enable drag-select
+				document.onmousedown = function() { return true; } // enable drag-select
+				if (this._isDown)
+				{
+					this._isDown = false;
+					var finX=x;
+					var finY=y;
+					if (this._points.length >= 10)
+					{
+						var result = this._r.Recognize(this._points, this.$.useProtractor.checked);
+						this.drawText("Result: " + result.Name + " (" + this.arrondi(result.Score,2) + ").");
+							console.log(result);
+				//		console.log(this._points);
+						var xMin=document.body.clientWidth,
+						xMax=0,
+						yMin=document.body.clientHeight,
+						yMax=0;
+
+						for (var i=0;i<this._points.length;i++){
+							var point=this._points[i];
+						/*ne semble pas fonctionnel avec Polymer
+            	xMin=min(xMin,point.X);
+							xMax=max(xMax,point.X);
+							yMin=min(yMin,point.Y);
+							yMax=max(yMax,point.Y);
+              */
+
+
+              if (point.X<xMin){
+                xMin=point.X;
+              }
+              if (point.X>xMax){
+                xMax=point.X;
+              }
+              if (point.Y<yMin){
+                yMin=point.Y;
+              }
+              if (point.Y>yMax){
+                yMax=point.Y;
+              }
+						}
+
+						switch(result.Name) {
+							case "circle":
+							var thingName = prompt("Quelle est cette chose ?");
+
+							if (thingName != null) {
+								/*document.getElementById("demo").innerHTML =
+								"Hello " + person + "! How are you today?";*/
+								var centerX=(xMin+xMax)/2;
+								var centerY=(yMin+yMax)/2;
+/* TEST D AFFICHAGE CERCLE SANS P5JS
+          //      var canvas = document.getElementById('myCanvas');
+          var canvas = this.$.myCanvas;
+var context = canvas.getContext('2d');
+//var centerX = canvas.width / 2;
+//var centerY = canvas.height / 2;
+var radius = 7;
+
+context.beginPath();
+context.arc(centerX, centerY, radius, 0, 2 * Math.PI, false);
+context.fillStyle = 'green';
+context.fill();
+//context.lineWidth = 5;
+context.strokeStyle = '#003300';
+context.stroke();
+*/
+								this.addCircle(thingName,centerX,centerY);
+
+							}
+
+							break;
+							case "rectangle":
+							rectangleSelection(xMin,yMin,xMax,yMax);
+							break;
+							default:
+							console.log("non traite "+result.Name);
+							this.drawText("Forme non reconnue, applique-toi !");
+							var menuAdd = this.$.menuAdd;
+							//menuAdd.z-index(3);
+							console.log(menuAdd);
+						}
+					}
+					else // fewer than 10 points were inputted
+					{
+						this.drawText("Too few points made. Please try again.");
+						this.selectPoint(this._points);
+					}
+				}
+			},
+
+			drawText: function (str)
+			{
+				this._g.fillStyle = "rgb(255,255,136)";
+				this._g.fillRect(0, 0, this._rc.width, 20);
+				this._g.fillStyle = "rgb(0,0,255)";
+				this._g.fillText(str, 1, 14);
+			},
+addCircle: function(thingName,centerX,centerY){
+  var forme={};
+  forme.type="circle";
+  forme.thingName=thingName;
+  forme.centerX=centerX;
+  forme.centerY=centerY;
+//  console.log(forme);
+//  this.set('formes', "Minions");
+// this.set('cartoon.hasEars', false);
+//  this.formes.put(forme);
+console.log(this.formes);
+  this.push('formes', forme);
+//this.set('cartoon.hasEars', false);
+// Force data system to pick up array mutations
+var array = this.formes;
+this.formes = [];
+this.formes = array;
+
+/* update de forme pour envoi vers drawer via localstore */
+this.forme = {};
+this.forme = forme;
+
+//test d'envoi d'un triplet
+this.sujet=thingName;
+this.propriete="type";
+this.objet="Cercle";
+/* ENVOI AU SERVEUR RDF
+this.sendUpdate();
+*/},
+
+			drawConnectedPoint: function (from, to)
+			{
+				this._g.beginPath();
+				this._g.moveTo(this._points[from].X, this._points[from].Y);
+				this._g.lineTo(this._points[to].X, this._points[to].Y);
+				this._g.closePath();
+				this._g.stroke();
+			},
+			arrondi: function (n, d) // arrondi 'n' to 'd' decimals
+			{
+				d = Math.pow(10, d);
+				return Math.round(n * d) / d
+			},
+			//
+			// Unistroke Adding and Clearing
+			//
+			onClickAddExisting: function ()
+			{
+				if (this._points.length >= 10)
+				{
+					var unistrokes = this.$.unistrokes;
+					var name = unistrokes[unistrokes.selectedIndex].value;
+					var num = this._r.AddGesture(name, this._points);
+					this.drawText("\"" + name + "\" added. Number of \"" + name + "\"s defined: " + num + ".");
+				}
+			},
+			onClickAddCustom: function ()
+			{
+				var name = this.$.custom.value;
+				if (this._points.length >= 10 && name.length > 0)
+				{
+					var num = this._r.AddGesture(name, this._points);
+					this.drawText("\"" + name + "\" added. Number of \"" + name + "\"s defined: " + num + ".");
+				}
+			},
+			onClickCustom: function ()
+			{
+				this.$.custom.select();
+			},
+
+			onClickDelete: function ()
+			{
+				var num = this._r.DeleteUserGestures(); // deletes any user-defined unistrokes
+				alert("All user-defined gestures have been deleted. Only the 1 predefined gesture remains for each of the " + num + " types.");
+			},
+
+      /**
+			* Execute la requete
+			*/
+			sendUpdate: function (e){
+        this.buildRequete();
+				console.log(this.sujet);
+				console.log(this.propriete);
+
+				console.log(this.objet);
+        console.log(this.options);
+				this.$.ajaxupdate.generateRequest();
+
+
+			},
+
+			/**
+			* recupere et parse la reponse du serveur
+			*/
+			handleResponse: function(data){
+				var html=data.detail.response.getElementsByTagName("html")[0];
+				var body=html.getElementsByTagName("body")[0];
+				var resultat=body.getElementsByTagName("h1")[0].firstChild.nodeValue;
+				this.result=resultat;
+				console.log(this.result);
+        this.getGraphe();
+			},
+
+      getGraphe: function(){
+        console.log("getGraphe");
+        console.log(this.endpoint+" "+this.ds+" "+this.action);
+        console.log(this.query+" "+this.limite+" "+this.output);
+        this.urlGetGraphe = this.computedUrl(this.endpoint,this.ds,this.action);
+        this.optionsgetGraphe = this.computedOptions(this.query,this.limite,this.output);
+        	this.$.ajaxGetGraphe.generateRequest();
+      },
+
+      /**
+			* recupere et parse la reponse du serveur
+			*/
+			handleResponseGetGraphe: function(data){
+				//var html=data.detail.response.getElementsByTagName("html")[0];
+			//	var body=html.getElementsByTagName("body")[0];
+		//		var resultat=body.getElementsByTagName("h1")[0].firstChild.nodeValue;
+		//		this.result=resultat;
+			//	console.log(this.result);
+      console.log(data.detail);
+      console.log(data.detail.response);
+  this.head=data.detail.response.head.vars;
+  this.resultsGetGraphe=data.detail.response.results.bindings;
+  console.log(this.head);
+  console.log(this.resultsGetGraphe);
+
+			},
+      computedUrl: function(endpoint,ds,action){
+  console.log(endpoint);
+  return [endpoint,ds,action].join('/');
+},
+computedOptions: function(query,limite,output){
+
+  var queryLimite=query+" LIMIT "+limite;
+  console.log(query);
+  return{query: queryLimite, output: output};
+},
+
+    });
+  </script>
+</dom-module>
